@@ -1,5 +1,5 @@
 import string
-from nltk.stem import PorterStemmer
+from tokenize import tokenize
 from inverted_index import InvertedIndex
 
 class MovieSearch:
@@ -10,21 +10,17 @@ class MovieSearch:
     def search(self, query):
         results = []
         titles = []
-        stemmer = PorterStemmer()
-        query_tokens = query.lower().translate(str.maketrans("", "", string.punctuation)).split()
-        query_list = list(filter(None, query_tokens))
+        query_list = tokenize(query)
 
-        for q in query_list:
-            if q not in self.index.stopwords:
-                qtoken = stemmer.stem(q)
-                docs = self.index.get_documents(qtoken)
-                for doc in docs:
-                    movie = self.index.docmap[doc]
-                    if movie["title"] not in titles:
-                        results.append(movie)
-                        titles.append(movie["title"])
-                    if len(results) == 5:
-                        return results
+        for qtoken in query_list:
+            docs = self.index.get_documents(qtoken)
+            for doc in docs:
+                movie = self.index.docmap[doc]
+                if movie["title"] not in titles:
+                    results.append(movie)
+                    titles.append(movie["title"])
+                if len(results) == 5:
+                    return results
         return results
     
         

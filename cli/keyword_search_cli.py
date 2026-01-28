@@ -18,6 +18,13 @@ def main() -> None:
     search_parser.add_argument("doc_id", type=int, help="Document id")
     search_parser.add_argument("term", type=str, help="Term")
 
+    search_parser = subparsers.add_parser("idf", help="Get the inverse document frequency of a term")
+    search_parser.add_argument("term", type=str, help="Term")
+
+    search_parser = subparsers.add_parser("tfidf", help="Get the frequency of a term")
+    search_parser.add_argument("doc_id", type=int, help="Document id")
+    search_parser.add_argument("term", type=str, help="Term")
+
     args = parser.parse_args()
 
     movies = MovieSearch()
@@ -44,6 +51,22 @@ def main() -> None:
                 print(e)
                 sys.exit()
             print(tf)
+        case "idf":
+            try: 
+                movies.index.load()
+                idf = movies.index.get_idf(args.term)
+            except Exception as e:
+                print(e)
+                sys.exit()
+            print(f"Inverse document frequency of '{args.term}': {idf:.2f}")
+        case "tfidf":
+            try: 
+                movies.index.load()
+                tf_idf = movies.index.get_tf_idf(args.doc_id, args.term)
+            except Exception as e:
+                print(e)
+                sys.exit()
+            print(f"TF-IDF score of '{args.term}' in document '{args.doc_id}': {tf_idf:.2f}")
         case _:
             parser.print_help()
 
