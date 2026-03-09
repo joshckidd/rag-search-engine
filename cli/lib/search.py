@@ -1,6 +1,6 @@
 import string
-from tokenize_cli import tokenize
-from inverted_index import InvertedIndex
+from lib.tokenize import tokenize
+from lib.inverted_index import InvertedIndex
 
 class MovieSearch:
 

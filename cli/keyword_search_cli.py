@@ -2,8 +2,8 @@
 
 import argparse
 import sys
-from search import MovieSearch
-from settings import *
+from lib.search import MovieSearch
+from lib.settings import *
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Keyword Search CLI")

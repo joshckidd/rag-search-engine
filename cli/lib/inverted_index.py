@@ -4,8 +4,8 @@ import pickle
 import math
 from pathlib import Path
 from collections import Counter
-from tokenize import tokenize
-from settings import *
+from lib.tokenize import tokenize
+from lib.settings import *
 
 class InvertedIndex:
     
