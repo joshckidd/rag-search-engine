@@ -2,7 +2,7 @@
 
 import argparse
 import sys
-from lib.search import MovieSearch
+from lib.keyword_search import MovieSearch
 from lib.settings import *
 
 def main() -> None:
