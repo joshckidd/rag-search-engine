@@ -144,6 +144,8 @@ class InvertedIndex:
 
             if len(results) == limit:
                 return results
+        
+        return results
 
 
             

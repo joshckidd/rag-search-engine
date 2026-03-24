@@ -142,12 +142,14 @@ class ChunkedSemanticSearch(SemanticSearch):
 
         res = []
 
-        for i in range(limit):
+        for i in range(len(movie_scores_ranked)):
             res.append({"score" : movie_scores_ranked[i]["score"], 
                         "title": self.document_map[movie_scores_ranked[i]["movie_idx"]]["title"], 
                         "document": self.document_map[movie_scores_ranked[i]["movie_idx"]]["description"][:100],
                         "id": movie_scores_ranked[i]["movie_idx"],
                         "metadata": {}})
+            if len(res) == limit:
+                return res
             
         return res        
 
