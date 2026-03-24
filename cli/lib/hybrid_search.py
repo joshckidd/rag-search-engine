@@ -84,22 +84,22 @@ class HybridSearch:
         for i in range(len(keyword_results)):
             results_dict[keyword_results[i]["id"]] = {
                 "document": keyword_results[i]["doc"],
-                "keyword_score": 1 / (k + i + 1),
+                "keyword_score": i + 1,
                 "semantic_score": 0.0
             }
 
         for i in range(len(semantic_results)):
             if semantic_results[i]["id"] in results_dict:
-                results_dict[semantic_results[i]["id"]]["semantic_score"] = 1 / (k + i + 1)
+                results_dict[semantic_results[i]["id"]]["semantic_score"] = i + 1
             else:
                 results_dict[semantic_results[i]["id"]] = {
                     "document": semantic_results[i]["doc"],
-                    "semantic_score": 1 / (k + i + 1),
+                    "semantic_score": i + 1,
                     "keyword_score": 0.0
                 }                
 
         for id in results_dict:
-            results_dict[id]["hybrid_score"] = results_dict[id]["keyword_score"] + results_dict[id]["semantic_score"]
+            results_dict[id]["hybrid_score"] = 1 / (results_dict[id]["keyword_score"] + k) + 1 / (results_dict[id]["semantic_score"] + k)
 
         sorted_results = {k: v for k, v in sorted(results_dict.items(), key=lambda item: item[1]["hybrid_score"], reverse=True)}
 

@@ -52,7 +52,7 @@ def main() -> None:
             for i in range(len(results)):
                 print(f"{i + 1}. {results[i]["document"]["title"]}")
                 print(f"   Hybrid Score: {results[i]["hybrid_score"]:.3f}")
-                print(f"   BM25: {results[i]["keyword_score"]:.3f}, Semantic: {results[i]["semantic_score"]:.3f}")
+                print(f"   BM25: {results[i]["keyword_score"]}, Semantic: {results[i]["semantic_score"]}")
                 print(f"   {results[i]["document"]["description"][:80]}...")
         case _:
             parser.print_help()
