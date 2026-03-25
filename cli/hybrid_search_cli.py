@@ -1,6 +1,9 @@
 import argparse
 import json
 from lib.hybrid_search import *
+import os
+from dotenv import load_dotenv
+from google import genai
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Hybrid Search CLI")
@@ -18,6 +21,7 @@ def main() -> None:
     rrf_search_parser.add_argument("query", type=str, help="Search query")
     rrf_search_parser.add_argument("-k", type=int, default=60, help="K value to rank weights")
     rrf_search_parser.add_argument("--limit", type=int, default=5, help="Maximum number of results to return")
+    rrf_search_parser.add_argument("--enhance", type=str, choices=["spell"], help="Query enhancement method")
 
     args = parser.parse_args()
 
@@ -46,8 +50,30 @@ def main() -> None:
                 documents = movies["movies"]
 
             model = HybridSearch(documents)
+            query = args.query
+
+            if args.enhance == "spell":
+                load_dotenv()
+                api_key = os.environ.get("GEMINI_API_KEY")
+                if not api_key:
+                    raise RuntimeError("GEMINI_API_KEY environment variable not set")
+
+                client = genai.Client(api_key=api_key)
+
+                content = f"""Fix any spelling errors in the user-provided movie search query below.
+Correct only clear, high-confidence typos. Do not rewrite, add, remove, or reorder words.
+Preserve punctuation and capitalization unless a change is required for a typo fix.
+If there are no spelling errors, or if you're unsure, output the original query unchanged.
+Output only the final query text, nothing else.
+User query: "{query}"
+"""
+                response = client.models.generate_content(model="gemma-3-27b-it", contents=content)
+                query = response.text
+                print(f"Enhanced query ({args.enhance}): '{args.query}' -> '{query}'\n")
+
+
                 
-            results = model.rrf_search(args.query, args.k, args.limit)
+            results = model.rrf_search(query, args.k, args.limit)
             
             for i in range(len(results)):
                 print(f"{i + 1}. {results[i]["document"]["title"]}")

@@ -85,7 +85,7 @@ class HybridSearch:
             results_dict[keyword_results[i]["id"]] = {
                 "document": keyword_results[i]["doc"],
                 "keyword_score": i + 1,
-                "semantic_score": 0.0
+                "semantic_score": 500
             }
 
         for i in range(len(semantic_results)):
@@ -93,9 +93,9 @@ class HybridSearch:
                 results_dict[semantic_results[i]["id"]]["semantic_score"] = i + 1
             else:
                 results_dict[semantic_results[i]["id"]] = {
-                    "document": semantic_results[i]["doc"],
+                    "document": self.semantic_search.document_map[semantic_results[i]["id"]],
                     "semantic_score": i + 1,
-                    "keyword_score": 0.0
+                    "keyword_score": 500
                 }                
 
         for id in results_dict:
