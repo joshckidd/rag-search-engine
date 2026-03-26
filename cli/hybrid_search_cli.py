@@ -2,6 +2,7 @@ import argparse
 import json
 from lib.hybrid_search import *
 import os
+import time
 from dotenv import load_dotenv
 from google import genai
 
@@ -21,7 +22,8 @@ def main() -> None:
     rrf_search_parser.add_argument("query", type=str, help="Search query")
     rrf_search_parser.add_argument("-k", type=int, default=60, help="K value to rank weights")
     rrf_search_parser.add_argument("--limit", type=int, default=5, help="Maximum number of results to return")
-    rrf_search_parser.add_argument("--enhance", type=str, choices=["spell"], help="Query enhancement method")
+    rrf_search_parser.add_argument("--enhance", type=str, choices=["spell", "rewrite", "expand"], help="Query enhancement method")
+    rrf_search_parser.add_argument("--rerank-method", type=str, choices=["individual"], help="Query enhancement method")
 
     args = parser.parse_args()
 
@@ -52,30 +54,102 @@ def main() -> None:
             model = HybridSearch(documents)
             query = args.query
 
-            if args.enhance == "spell":
-                load_dotenv()
-                api_key = os.environ.get("GEMINI_API_KEY")
-                if not api_key:
-                    raise RuntimeError("GEMINI_API_KEY environment variable not set")
+            load_dotenv()
+            api_key = os.environ.get("GEMINI_API_KEY")
+            if not api_key:
+                raise RuntimeError("GEMINI_API_KEY environment variable not set")
 
-                client = genai.Client(api_key=api_key)
+            client = genai.Client(api_key=api_key)
 
-                content = f"""Fix any spelling errors in the user-provided movie search query below.
-Correct only clear, high-confidence typos. Do not rewrite, add, remove, or reorder words.
-Preserve punctuation and capitalization unless a change is required for a typo fix.
-If there are no spelling errors, or if you're unsure, output the original query unchanged.
-Output only the final query text, nothing else.
+            match args.enhance:
+                case "spell":
+
+                    content = f"""Fix any spelling errors in the user-provided movie search query below.
+    Correct only clear, high-confidence typos. Do not rewrite, add, remove, or reorder words.
+    Preserve punctuation and capitalization unless a change is required for a typo fix.
+    If there are no spelling errors, or if you're unsure, output the original query unchanged.
+    Output only the final query text, nothing else.
+    User query: "{query}"
+"""
+                    response = client.models.generate_content(model="gemma-3-27b-it", contents=content)
+                    query = response.text
+                    print(f"Enhanced query ({args.enhance}): '{args.query}' -> '{query}'\n")
+                case "rewrite":
+
+                    content = f"""Rewrite the user-provided movie search query below to be more specific and searchable.
+
+Consider:
+- Common movie knowledge (famous actors, popular films)
+- Genre conventions (horror = scary, animation = cartoon)
+- Keep the rewritten query concise (under 10 words)
+- It should be a Google-style search query, specific enough to yield relevant results
+- Don't use boolean logic
+
+Examples:
+- "that bear movie where leo gets attacked" -> "The Revenant Leonardo DiCaprio bear attack"
+- "movie about bear in london with marmalade" -> "Paddington London marmalade"
+- "scary movie with bear from few years ago" -> "bear horror movie 2015-2020"
+
+If you cannot improve the query, output the original unchanged.
+Output only the rewritten query text, nothing else.
+
 User query: "{query}"
 """
-                response = client.models.generate_content(model="gemma-3-27b-it", contents=content)
-                query = response.text
-                print(f"Enhanced query ({args.enhance}): '{args.query}' -> '{query}'\n")
+                    response = client.models.generate_content(model="gemma-3-27b-it", contents=content)
+                    query = response.text
+                    print(f"Enhanced query ({args.enhance}): '{args.query}' -> '{query}'\n")
+                case "expand":
 
+                    content = f"""Expand the user-provided movie search query below with related terms.
 
-                
-            results = model.rrf_search(query, args.k, args.limit)
-            
-            for i in range(len(results)):
+Add synonyms and related concepts that might appear in movie descriptions.
+Keep expansions relevant and focused.
+Output only the additional terms; they will be appended to the original query.
+
+Examples:
+- "scary bear movie" -> "scary horror grizzly bear movie terrifying film"
+- "action movie with bear" -> "action thriller bear chase fight adventure"
+- "comedy with bear" -> "comedy funny bear humor lighthearted"
+
+User query: "{query}"
+"""
+                    response = client.models.generate_content(model="gemma-3-27b-it", contents=content)
+                    query = response.text
+                    print(f"Enhanced query ({args.enhance}): '{args.query}' -> '{query}'\n")
+
+            limit = args.limit
+
+            match args.rerank_method:
+                case "individual":
+                    limit = limit * 5
+
+            results = model.rrf_search(query, args.k, limit)
+
+            match args.rerank_method:
+                case "individual":
+                    for result in results:
+                        doc = result["document"]
+                        content = f"""Rate how well this movie matches the search query.
+
+Query: "{query}"
+Movie: {doc.get("title", "")} - {doc.get("description", "")}
+
+Consider:
+- Direct relevance to query
+- User intent (what they're looking for)
+- Content appropriateness
+
+Rate 0-10 (10 = perfect match).
+Output ONLY the number in your response, no other text or explanation.
+
+Score:"""
+                        score_response = client.models.generate_content(model="gemma-3-27b-it", contents=content)
+                        result["rerank_score"] = score_response.text
+                        time.sleep(3)
+
+            results = sorted(results, key=lambda x: x["rerank_score"], reverse=True)
+
+            for i in range(args.limit):
                 print(f"{i + 1}. {results[i]["document"]["title"]}")
                 print(f"   Hybrid Score: {results[i]["hybrid_score"]:.3f}")
                 print(f"   BM25: {results[i]["keyword_score"]}, Semantic: {results[i]["semantic_score"]}")
