@@ -3,6 +3,7 @@ import json
 from lib.hybrid_search import *
 import os
 import time
+import json
 from dotenv import load_dotenv
 from google import genai
 
@@ -23,7 +24,7 @@ def main() -> None:
     rrf_search_parser.add_argument("-k", type=int, default=60, help="K value to rank weights")
     rrf_search_parser.add_argument("--limit", type=int, default=5, help="Maximum number of results to return")
     rrf_search_parser.add_argument("--enhance", type=str, choices=["spell", "rewrite", "expand"], help="Query enhancement method")
-    rrf_search_parser.add_argument("--rerank-method", type=str, choices=["individual"], help="Query enhancement method")
+    rrf_search_parser.add_argument("--rerank-method", type=str, choices=["individual", "batch"], help="Query enhancement method")
 
     args = parser.parse_args()
 
@@ -120,7 +121,7 @@ User query: "{query}"
             limit = args.limit
 
             match args.rerank_method:
-                case "individual":
+                case "individual", "batch":
                     limit = limit * 5
 
             results = model.rrf_search(query, args.k, limit)
@@ -146,11 +147,42 @@ Score:"""
                         score_response = client.models.generate_content(model="gemma-3-27b-it", contents=content)
                         result["rerank_score"] = score_response.text
                         time.sleep(3)
+                    results = sorted(results, key=lambda x: x["rerank_score"], reverse=True)
+                case "batch":
+                    doc_list_str = str(results)
+                    content = f"""Rank the movies listed below by relevance to the following search query.
 
-            results = sorted(results, key=lambda x: x["rerank_score"], reverse=True)
+Query: "{query}"
+
+Movies:
+{doc_list_str}
+
+Return ONLY the movie IDs in order of relevance (best match first). Return a valid JSON list, nothing else.
+
+For example:
+[75, 12, 34, 2, 1]
+
+Ranking:"""
+                    score_response = client.models.generate_content(model="gemma-3-27b-it", contents=content)
+                    top_results = json.loads(score_response.text)
+                    new_results = []
+                    i = 0
+                    while i < args.limit and i < len(top_results):
+                        for r in results:
+                            if r["document"]["id"] == top_results[i]:
+                                new_results.append(r)
+                        i += 1
+                    results = new_results
+
+            
 
             for i in range(args.limit):
                 print(f"{i + 1}. {results[i]["document"]["title"]}")
+                match args.rerank_method:
+                    case "batch":
+                        print(f"   Re-rank Rank: {i + 1}")
+                    case "individual":
+                        print(f"   Re-rank Score: {results[i]["rerank_score"]:.3f}/10")
                 print(f"   Hybrid Score: {results[i]["hybrid_score"]:.3f}")
                 print(f"   BM25: {results[i]["keyword_score"]}, Semantic: {results[i]["semantic_score"]}")
                 print(f"   {results[i]["document"]["description"][:80]}...")
