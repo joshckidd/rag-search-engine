@@ -25,7 +25,8 @@ def main() -> None:
     rrf_search_parser.add_argument("-k", type=int, default=60, help="K value to rank weights")
     rrf_search_parser.add_argument("--limit", type=int, default=5, help="Maximum number of results to return")
     rrf_search_parser.add_argument("--enhance", type=str, choices=["spell", "rewrite", "expand"], help="Query enhancement method")
-    rrf_search_parser.add_argument("--rerank-method", type=str, choices=["individual", "batch", "cross_encoder"], help="Query enhancement method")
+    rrf_search_parser.add_argument("--rerank-method", type=str, choices=["individual", "batch", "cross_encoder"], help="Results rerank method")
+    rrf_search_parser.add_argument("--evaluate", action="store_true", help="Evaluate results flag")
 
     args = parser.parse_args()
 
@@ -147,7 +148,7 @@ Score:"""
                         score_response = client.models.generate_content(model="gemma-3-27b-it", contents=content)
                         result["rerank_score"] = score_response.text
                         time.sleep(3)
-                    results = sorted(results, key=lambda x: x["rerank_score"], reverse=True)
+                    new_results = sorted(results, key=lambda x: x["rerank_score"], reverse=True)
                 case "batch":
                     doc_list_str = str(results)
                     content = f"""Rank the movies listed below by relevance to the following search query.
@@ -172,7 +173,6 @@ Ranking:"""
                             if r["document"]["id"] == top_results[i]:
                                 new_results.append(r)
                         i += 1
-                    results = new_results
                 case "cross_encoder":
                     pairs = []
                     for result in results:
@@ -182,10 +182,11 @@ Ranking:"""
                     scores = cross_encoder.predict(pairs)
                     for i in range(len(results)):
                         results[i]["cross_encoder_score"] = scores[i]
-                    results = sorted(results, key=lambda x: x["cross_encoder_score"], reverse=True)
-
-
-            for i in range(args.limit):
+                    new_results = sorted(results, key=lambda x: x["cross_encoder_score"], reverse=True)
+                case _:
+                    new_results = results
+            print("Results before reranking:")
+            for i in range(len(results)):
                 print(f"{i + 1}. {results[i]["document"]["title"]}")
                 match args.rerank_method:
                     case "batch":
@@ -197,6 +198,47 @@ Ranking:"""
                 print(f"   Hybrid Score: {results[i]["hybrid_score"]:.3f}")
                 print(f"   BM25: {results[i]["keyword_score"]}, Semantic: {results[i]["semantic_score"]}")
                 print(f"   {results[i]["document"]["description"][:80]}...")
+
+            print("Results after reranking:")
+            formatted_results = ""
+            for i in range(args.limit):
+                formatted_results += f"{i + 1}. {new_results[i]["document"]["title"]}\n"
+                match args.rerank_method:
+                    case "batch":
+                       formatted_results += f"   Re-rank Rank: {i + 1}\n"
+                    case "individual":
+                        formatted_results += f"   Re-rank Score: {new_results[i]["rerank_score"]:.3f}/10\n"
+                    case "cross_encoder":
+                        formatted_results += f"   Re-rank Score: {new_results[i]["cross_encoder_score"]:.3f}/10\n"
+                formatted_results += f"   Hybrid Score: {new_results[i]["hybrid_score"]:.3f}\n"
+                formatted_results += f"   BM25: {new_results[i]["keyword_score"]}, Semantic: {new_results[i]["semantic_score"]}\n"
+                formatted_results += f"   {new_results[i]["document"]["description"][:80]}...\n"
+            print(formatted_results)
+
+            if args.evaluate:
+                content = f"""Rate how relevant each result is to this query on a 0-3 scale:
+
+Query: "{query}"
+
+Results:
+{chr(10).join(formatted_results)}
+
+Scale:
+- 3: Highly relevant
+- 2: Relevant
+- 1: Marginally relevant
+- 0: Not relevant
+
+Do NOT give any numbers other than 0, 1, 2, or 3.
+
+Return ONLY the scores in the same order you were given the documents. Return a valid JSON list, nothing else. For example:
+
+[2, 0, 3, 2, 0, 1]"""
+                response = client.models.generate_content(model="gemma-3-27b-it", contents=content)
+                evaluation = json.loads(response.text)
+                for i in range(args.limit):
+                    print(f"{i + 1}. {new_results[i]["document"]["title"]}: {evaluation[i]}/3")
+                
         case _:
             parser.print_help()
 

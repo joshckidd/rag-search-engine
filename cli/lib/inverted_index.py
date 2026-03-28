@@ -97,7 +97,10 @@ class InvertedIndex:
         tokens = tokenize(term)
         if len(tokens) > 1:
             raise Exception("Too many terms.")
-        term_match_doc_count = len(self.index[tokens[0]])
+        if tokens[0] in self.index:
+            term_match_doc_count = len(self.index[tokens[0]])
+        else:
+            term_match_doc_count = 0
         
         return math.log((total_doc_count - term_match_doc_count + 0.5) / (term_match_doc_count + 0.5) + 1)
     
