@@ -6,6 +6,7 @@ import time
 import json
 from dotenv import load_dotenv
 from google import genai
+from sentence_transformers import CrossEncoder
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Hybrid Search CLI")
@@ -24,7 +25,7 @@ def main() -> None:
     rrf_search_parser.add_argument("-k", type=int, default=60, help="K value to rank weights")
     rrf_search_parser.add_argument("--limit", type=int, default=5, help="Maximum number of results to return")
     rrf_search_parser.add_argument("--enhance", type=str, choices=["spell", "rewrite", "expand"], help="Query enhancement method")
-    rrf_search_parser.add_argument("--rerank-method", type=str, choices=["individual", "batch"], help="Query enhancement method")
+    rrf_search_parser.add_argument("--rerank-method", type=str, choices=["individual", "batch", "cross_encoder"], help="Query enhancement method")
 
     args = parser.parse_args()
 
@@ -120,9 +121,8 @@ User query: "{query}"
 
             limit = args.limit
 
-            match args.rerank_method:
-                case "individual", "batch":
-                    limit = limit * 5
+            if args.rerank_method != None:
+                limit = limit * 5
 
             results = model.rrf_search(query, args.k, limit)
 
@@ -173,8 +173,17 @@ Ranking:"""
                                 new_results.append(r)
                         i += 1
                     results = new_results
+                case "cross_encoder":
+                    pairs = []
+                    for result in results:
+                        doc = result["document"]
+                        pairs.append([query, f"{doc.get('title', '')} - {doc.get('document', '')}"])
+                    cross_encoder = CrossEncoder("cross-encoder/ms-marco-TinyBERT-L2-v2")
+                    scores = cross_encoder.predict(pairs)
+                    for i in range(len(results)):
+                        results[i]["cross_encoder_score"] = scores[i]
+                    results = sorted(results, key=lambda x: x["cross_encoder_score"], reverse=True)
 
-            
 
             for i in range(args.limit):
                 print(f"{i + 1}. {results[i]["document"]["title"]}")
@@ -183,6 +192,8 @@ Ranking:"""
                         print(f"   Re-rank Rank: {i + 1}")
                     case "individual":
                         print(f"   Re-rank Score: {results[i]["rerank_score"]:.3f}/10")
+                    case "cross_encoder":
+                        print(f"   Re-rank Score: {results[i]["cross_encoder_score"]:.3f}/10")
                 print(f"   Hybrid Score: {results[i]["hybrid_score"]:.3f}")
                 print(f"   BM25: {results[i]["keyword_score"]}, Semantic: {results[i]["semantic_score"]}")
                 print(f"   {results[i]["document"]["description"][:80]}...")
